@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dreamnote</title>
+<style>
+  :root{
+    --bg:#04050a; --ink:#f4f7fc; --muted:#8b93a6; --accent:#6ea8ff;
+    --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue","Segoe UI",system-ui,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--ink);font-family:var(--font);-webkit-font-smoothing:antialiased;overflow:hidden}
+  /* ambient light */
+  .glow,.glow2{position:fixed;z-index:0;pointer-events:none;border-radius:50%;filter:blur(70px);will-change:transform}
+  .glow{inset:-20% 10% auto -10%;height:70vh;background:radial-gradient(circle, rgba(110,168,255,.20), transparent 62%);animation:drift1 26s ease-in-out infinite}
+  .glow2{inset:auto -15% -25% 30%;height:65vh;background:radial-gradient(circle, rgba(86,120,220,.16), transparent 64%);animation:drift2 32s ease-in-out infinite}
+  @keyframes drift1{0%,100%{transform:translate(0,0)}50%{transform:translate(5vw,4vh)}}
+  @keyframes drift2{0%,100%{transform:translate(0,0)}50%{transform:translate(-6vw,-3vh)}}
+  /* film grain + vignette */
+  .noise{position:fixed;inset:0;z-index:2;pointer-events:none;opacity:.05;background-size:170px 170px;
+    background-image:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='170'%20height='170'%3E%3Cfilter%20id='n'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.82'%20numOctaves='2'%20stitchTiles='stitch'/%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23n)'/%3E%3C/svg%3E")}
+  .vignette{position:fixed;inset:0;z-index:2;pointer-events:none;background:radial-gradient(125% 100% at 50% 50%, transparent 56%, rgba(0,0,0,.55) 100%)}
+  /* deck */
+  .deck{position:relative;z-index:1;height:100%;overflow-y:scroll;scroll-snap-type:y mandatory;scroll-behavior:smooth}
+  .deck::-webkit-scrollbar{width:0;background:transparent}
+  .scene{min-height:100svh;scroll-snap-align:center;scroll-snap-stop:always;display:flex;flex-direction:column;
+    justify-content:center;align-items:center;padding:7vh 7vw;position:relative}
+  /* scroll-linked motion layer: parallax (--p) + velocity skew (--v) */
+  .layer{display:flex;flex-direction:column;align-items:center;text-align:center;will-change:transform;
+    transform:translateY(calc(var(--p,0)*22px)) skewY(calc(var(--v,0)*-1.15deg))}
+  h1{font-size:clamp(2.3rem,7.2vw,5.6rem);font-weight:600;letter-spacing:-.038em;line-height:1.03;max-width:17ch}
+  h1 .b{display:block}
+  .accent{color:var(--accent);text-shadow:0 0 30px rgba(110,168,255,.4)}
+  .grad{background:linear-gradient(176deg,#ffffff 0%,#cfe0ff 48%,#6ea8ff 100%);-webkit-background-clip:text;
+    background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+  .sub{font-size:clamp(1.05rem,2.6vw,1.7rem);color:var(--muted);font-weight:400;line-height:1.45;max-width:32ch;
+    margin-top:1.8rem;letter-spacing:-.01em}
+  .small{font-size:clamp(.95rem,2.1vw,1.25rem);color:var(--muted);max-width:36ch;margin-top:1.3rem;line-height:1.5}
+  .quote{font-size:clamp(1.5rem,3.8vw,2.6rem);font-weight:500;letter-spacing:-.02em;line-height:1.2;max-width:18ch}
+  .attr{font-size:clamp(.8rem,1.6vw,1rem);color:var(--accent);letter-spacing:.16em;text-transform:uppercase;margin-top:1.7rem}
+  .kicker{font-size:clamp(.72rem,1.5vw,.9rem);letter-spacing:.3em;text-transform:uppercase;color:var(--accent);font-weight:500;margin-bottom:1.9rem}
+  /* brand */
+  .brand{display:flex;flex-direction:column;align-items:center;gap:.45rem;margin-bottom:2.4rem}
+  .brand .name{font-size:clamp(1.7rem,4.4vw,2.8rem);font-weight:600;letter-spacing:-.02em}
+  .brand .tag{font-size:clamp(.72rem,1.5vw,.9rem);letter-spacing:.34em;text-transform:uppercase;color:var(--muted)}
+  /* reveal: focus-in (blur + rise + settle). Hidden state only applies when JS
+     is running (html.js) — viewers without JS get the full static deck. */
+  .r{will-change:opacity,transform,filter;
+    transition:opacity 1.15s cubic-bezier(.16,.84,.3,1),transform 1.15s cubic-bezier(.16,.84,.3,1),filter 1.05s ease;
+    transition-delay:calc(var(--i,0)*150ms)}
+  .js .r{opacity:0;transform:translateY(28px) scale(.992);filter:blur(3px)}
+  .in .r{opacity:1;transform:none;filter:blur(0)}
+  /* hero waveform */
+  .wave{width:min(420px,66vw);height:64px;margin-bottom:2.4rem;overflow:visible;filter:drop-shadow(0 0 20px rgba(110,168,255,.45))}
+  .wave path{fill:none;stroke:var(--accent);stroke-width:2;stroke-linecap:round;opacity:.9;
+    stroke-dasharray:1400;stroke-dashoffset:1400;animation:draw 2.4s ease forwards .3s, breathe 4.5s ease-in-out infinite 2.7s}
+  @keyframes draw{to{stroke-dashoffset:0}}
+  @keyframes breathe{0%,100%{transform:scaleY(1)}50%{transform:scaleY(.6)}}
+  /* counter */
+  .count{font-size:clamp(2.2rem,8.4vw,6rem);font-weight:600;letter-spacing:-.045em;line-height:1;font-variant-numeric:tabular-nums}
+  .count .unit{display:block;font-size:clamp(1rem,2.4vw,1.5rem);font-weight:400;color:var(--muted);letter-spacing:-.01em;margin-top:1.2rem}
+  /* resolve */
+  .resolve{width:min(560px,80vw);margin-bottom:1.7rem;display:flex;flex-direction:column;gap:9px}
+  .bar{height:12px;border-radius:99px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.12);transform-origin:left center;
+    transition:transform 1.15s cubic-bezier(.16,.84,.3,1),width 1.15s cubic-bezier(.16,.84,.3,1),
+      background 1s ease,opacity 1s ease,margin 1.15s cubic-bezier(.16,.84,.3,1),box-shadow 1s ease,border-color 1s ease;
+    transition-delay:calc(var(--i,0)*85ms)}
+  .in .resolve .bar{width:100%!important;transform:none!important;background:rgba(110,168,255,.3);opacity:1;margin-left:0!important;
+    border-color:rgba(110,168,255,.5);box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 0 22px rgba(110,168,255,.42)}
+  .label-swap{position:relative;height:1.7em;margin-top:.3rem;width:min(560px,80vw)}
+  .label-swap span{position:absolute;left:0;right:0;transition:opacity .8s ease;color:var(--muted);font-size:clamp(.95rem,2vw,1.2rem)}
+  .label-swap .chaos{opacity:1}.label-swap .order{opacity:0;color:var(--accent)}
+  .in .label-swap .chaos{opacity:0}.in .label-swap .order{opacity:1;transition-delay:.75s}
+  /* close mark */
+  .mark{display:flex;flex-direction:column;align-items:center;gap:.4rem;margin-top:3.4rem}
+  .mark .name{display:flex;align-items:center;gap:.6rem;color:var(--ink);font-weight:600;font-size:clamp(1.1rem,2.4vw,1.5rem);letter-spacing:-.01em}
+  .mark .tag{font-size:clamp(.7rem,1.4vw,.85rem);letter-spacing:.3em;text-transform:uppercase;color:var(--muted)}
+  .moon{width:13px;height:13px;border-radius:50%;box-shadow:5px 0 0 0 var(--accent),0 0 14px rgba(110,168,255,.6);border:1.5px solid var(--accent)}
+  /* sonar ping: a source dot with radiating rings */
+  .sonar{position:relative;width:16px;height:16px;flex:none}
+  .sonar i{position:absolute;inset:5.5px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px rgba(110,168,255,.9)}
+  .sonar::before,.sonar::after{content:"";position:absolute;inset:0;border-radius:50%;border:1.5px solid var(--accent);
+    animation:ping 2.8s cubic-bezier(.2,.6,.4,1) infinite}
+  .sonar::after{animation-delay:1.4s}
+  @keyframes ping{0%{transform:scale(.35);opacity:.95}75%,100%{transform:scale(1.9);opacity:0}}
+  .brand .name,.mark .name{display:inline-flex;align-items:center;gap:.55rem}
+  /* license scene: family bars + stat chips */
+  .fams{width:min(540px,82vw);display:flex;flex-direction:column;gap:11px;margin-top:2.1rem}
+  .fam{display:grid;grid-template-columns:1fr auto;align-items:baseline;gap:4px 12px;text-align:left}
+  .fam .nm{font-size:clamp(.85rem,1.9vw,1.02rem);color:var(--ink);letter-spacing:-.01em}
+  .fam .ct{font-size:clamp(.74rem,1.6vw,.9rem);color:var(--accent);font-variant-numeric:tabular-nums;letter-spacing:.04em}
+  .fam .tr{grid-column:1/-1;height:8px;border-radius:99px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);overflow:hidden}
+  .fam .tr i{display:block;height:100%;width:var(--w,50%);border-radius:99px;background:linear-gradient(90deg,rgba(110,168,255,.25),rgba(110,168,255,.8));
+    box-shadow:0 0 14px rgba(110,168,255,.4);transition:width 1.25s cubic-bezier(.16,.84,.3,1);transition-delay:calc(var(--i,0)*130ms)}
+  .js .fam .tr i{width:0}
+  .in .fam .tr i{width:var(--w,50%)}
+  .chips{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:2rem}
+  .chipglass{display:inline-flex;align-items:center;padding:.5rem 1.05rem;border-radius:999px;font-size:clamp(.76rem,1.6vw,.94rem);color:var(--muted);
+    background:rgba(255,255,255,.09);-webkit-backdrop-filter:blur(15px) saturate(165%);backdrop-filter:blur(15px) saturate(165%);
+    border:1px solid rgba(255,255,255,.18);box-shadow:inset 0 1px 0 rgba(255,255,255,.32),0 12px 34px rgba(0,0,0,.3)}
+  .chipglass b{color:var(--ink);font-variant-numeric:tabular-nums;font-weight:600;margin:0 .3em}
+  /* progress dots */
+  .dots{position:fixed;right:24px;top:50%;transform:translateY(-50%);z-index:3;display:flex;flex-direction:column;gap:14px}
+  .dots button{width:7px;height:7px;border-radius:50%;background:rgba(244,247,252,.16);border:0;padding:0;cursor:pointer;
+    transition:transform .45s cubic-bezier(.16,.84,.3,1),background .45s ease,box-shadow .45s ease}
+  .dots button.on{background:var(--accent);transform:scale(1.35);box-shadow:0 0 12px rgba(110,168,255,.7)}
+  /* scroll hint */
+  .hint{position:absolute;bottom:3.4vh;left:50%;transform:translateX(-50%);color:var(--muted);font-size:.72rem;
+    letter-spacing:.22em;text-transform:uppercase;opacity:0;animation:fade 1.2s ease forwards 2.6s}
+  .hint .chev{display:block;margin:.7rem auto 0;width:9px;height:9px;border-right:1.5px solid var(--muted);
+    border-bottom:1.5px solid var(--muted);transform:rotate(45deg);animation:bob 1.8s ease-in-out infinite}
+  @keyframes fade{to{opacity:.65}} @keyframes bob{0%,100%{transform:rotate(45deg) translate(0,0)}50%{transform:rotate(45deg) translate(3px,3px)}}
+  /* liquid glass */
+  .kicker,.hint,.dots,.brand,.mark{position:relative;overflow:hidden;
+    background:rgba(255,255,255,.09);-webkit-backdrop-filter:blur(15px) saturate(165%);backdrop-filter:blur(15px) saturate(165%);
+    border:1px solid rgba(255,255,255,.18);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.32),inset 0 -1px 2px rgba(0,0,0,.18),0 16px 44px rgba(0,0,0,.36)}
+  .kicker,.hint,.dots{border-radius:999px}
+  .brand,.mark{border-radius:24px}
+  .kicker{display:inline-flex;align-items:center;padding:.5rem 1.2rem}
+  .hint{padding:.55rem 1.1rem}
+  .hint .chev{margin:.45rem auto 0}
+  .dots{padding:13px 9px}
+  .brand{padding:1.05rem 1.9rem;margin-bottom:2.4rem}
+  .mark{padding:1.15rem 2rem;margin-top:3.4rem}
+  .kicker::before,.brand::before,.mark::before{content:"";position:absolute;inset:0;pointer-events:none;
+    mix-blend-mode:screen;background:linear-gradient(115deg,transparent 38%,rgba(255,255,255,.55) 50%,transparent 62%);
+    transform:translateX(-135%);animation:sheen 6.5s ease-in-out infinite}
+  @keyframes sheen{0%,22%{transform:translateX(-135%)}46%,100%{transform:translateX(135%)}}
+  @media (max-width:640px){.dots{display:none}}
+  @media (prefers-reduced-motion: reduce){
+    .layer{transform:none!important}
+    .r{opacity:1;transform:none;filter:none;transition:none}
+    .glow,.glow2,.wave path{animation:none}.wave path{stroke-dashoffset:0}
+    .bar{transition:none}.hint{animation:none;opacity:.6}.hint .chev{animation:none}
+    .fam .tr i{transition:none;width:var(--w,50%)}
+    .sonar::before{animation:none;transform:scale(1);opacity:.45}
+    .sonar::after{animation:none;opacity:0}
+    .kicker::before,.brand::before,.mark::before{animation:none;opacity:0}
+  }
+</style>
+</head>
+<body>
+<script>document.documentElement.classList.add('js')</script>
+<div class="glow"></div><div class="glow2"></div>
+<main class="deck" id="deck">
+
+  <section class="scene" data-scene>
+    <div class="layer">
+      <div class="brand r"><span class="name"><span class="moon"></span> <span>Dream<span class="accent">note</span></span></span><span class="tag">Dreamscore</span></div>
+      <svg class="wave r" style="--i:1" viewBox="0 0 420 64" aria-hidden="true"><path d="M0,32 Q21,5 42,32 T84,32 T126,32 Q147,2 168,32 T210,32 T252,32 Q273,7 294,32 T336,32 T378,32 T420,32"/></svg>
+      <h1 class="r" style="--i:2">Data is the oil of the 21st century.</h1>
+      <p class="sub r" style="--i:4">First it was used for advertising.<br>Now, it&rsquo;s used for <span class="accent">intelligence</span>.</p>
+    </div>
+    <div class="hint">Scroll<span class="chev"></span></div>
+  </section>
+
+  <section class="scene" data-scene>
+    <div class="layer">
+      <h1 class="r">AI can&rsquo;t replace a human artist.</h1>
+      <p class="sub r" style="--i:1">Live shows, healing wellness, baby music;<br>it all needs the human touch.</p>
+      <p class="small r" style="--i:2">But understanding the data behind it<br>is where <span class="accent">intelligence</span> excels.</p>
+    </div>
+  </section>
+
+  <section class="scene" data-scene data-count>
+    <div class="layer">
+      <div class="count r"><span id="counter" class="grad">100,000,000,000</span><span class="unit">rows, understood in moments.</span></div>
+      <p class="sub r" style="--i:1">No data team can come close.</p>
+    </div>
+  </section>
+
+  <section class="scene" data-scene>
+    <div class="layer">
+      <h1 class="r">Every distributor reports differently.</h1>
+      <p class="sub r" style="--i:1">Tens of dashboards, hundreds of csv&rsquo;s,<br>nothing to bring them together.</p>
+      <p class="small r" style="--i:2">Decisions based on guesswork.</p>
+    </div>
+  </section>
+
+  <section class="scene" data-scene>
+    <div class="layer">
+      <div class="resolve r">
+        <div class="bar" style="--i:0;width:64%;margin-left:18%;transform:translateX(-40px)"></div>
+        <div class="bar" style="--i:1;width:82%;margin-left:6%;transform:translateX(60px)"></div>
+        <div class="bar" style="--i:2;width:48%;margin-left:30%;transform:translateX(-80px)"></div>
+        <div class="bar" style="--i:3;width:90%;margin-left:2%;transform:translateX(30px)"></div>
+        <div class="bar" style="--i:4;width:56%;margin-left:22%;transform:translateX(-20px)"></div>
+        <div class="bar" style="--i:5;width:74%;margin-left:12%;transform:translateX(70px)"></div>
+        <div class="bar" style="--i:6;width:40%;margin-left:36%;transform:translateX(-60px)"></div>
+      </div>
+      <div class="label-swap r" style="--i:7"><span class="chaos">Hundreds of files. Nothing that agrees.</span><span class="order">One engine. Every source. One source of truth.</span></div>
+      <p class="quote r" style="--i:8;margin-top:1.3rem">So we built the hard part.</p>
+      <h1 class="r grad" style="--i:9;font-size:clamp(2.6rem,8.8vw,6.6rem);line-height:1.0;margin-top:1.1rem"><span class="b">The bridge between music data</span><span class="b">and the AI era.</span></h1>
+    </div>
+  </section>
+
+  <section class="scene" data-scene>
+    <div class="layer">
+      <h1 class="r">We help artists build a better business.</h1>
+      <p class="sub r" style="--i:1">Where your audience is growing. Where to tour, what to play.</p>
+      <p class="small r" style="--i:2">Use the data to look forward; it&rsquo;s more than just a flex.</p>
+    </div>
+  </section>
+
+  <section class="scene" data-scene>
+    <div class="layer">
+      <div class="kicker r">Bidirectional</div>
+      <p class="sub r" style="--i:1;margin-top:0">Imagine if you could open Apple Music. Press play.</p>
+      <h1 class="r" style="--i:2">And every song is a <span class="accent">&ldquo;Wow&rdquo;</span>.</h1>
+      <p class="small r" style="--i:4">With proper use of data, music will find its people,<br>and people will find their music.</p>
+    </div>
+  </section>
+
+  <section class="scene" data-scene>
+    <div class="layer">
+      <div class="kicker r">The License</div>
+      <h1 class="r" style="--i:1">The 25-module engine.</h1>
+      <div class="fams r" style="--i:2">
+        <div class="fam" style="--i:0"><span class="nm">Money core</span><span class="ct">8 modules</span><span class="tr"><i style="--w:100%"></i></span></div>
+        <div class="fam" style="--i:1"><span class="nm">Payments &amp; attribution</span><span class="ct">5 modules</span><span class="tr"><i style="--w:62%"></i></span></div>
+        <div class="fam" style="--i:2"><span class="nm">Statement recognition</span><span class="ct">4 modules</span><span class="tr"><i style="--w:50%"></i></span></div>
+        <div class="fam" style="--i:3"><span class="nm">Data formats</span><span class="ct">5 modules</span><span class="tr"><i style="--w:50%"></i></span></div>
+        <div class="fam" style="--i:4"><span class="nm">Insights math</span><span class="ct">1 module</span><span class="tr"><i style="--w:18%"></i></span></div>
+        <div class="fam" style="--i:5"><span class="nm">Revenue projection</span><span class="ct">2 modules</span><span class="tr"><i style="--w:25%"></i></span></div>
+      </div>
+      <div class="chips r" style="--i:6">
+        <span class="chipglass"><b>5,168</b> automated checks &middot; cent-exact</span>
+        <span class="chipglass"><b>7,922</b> lines of core &middot; tested by <b>3.0&times;</b> as much</span>
+      </div>
+      <p class="small r" style="--i:7">One DMG when you want the product.<br>Modules when you want the machinery.</p>
+    </div>
+  </section>
+
+  <!-- THE OFFER: placeholder copy — final wording pending counsel input -->
+  <section class="scene" data-scene>
+    <div class="layer">
+      <div class="kicker r">The Offer</div>
+      <h1 class="r" style="--i:1">License the engine.<br>Keep the builders.</h1>
+      <p class="sub r" style="--i:2">A license for the machinery,<br>a partnership for what comes next.</p>
+      <p class="small r" style="--i:3">Structure and terms shaped with counsel.</p>
+    </div>
+  </section>
+
+  <section class="scene" data-scene>
+    <div class="layer">
+      <div class="kicker r">Integration</div>
+      <h1 class="r" style="--i:1">We stay and build.</h1>
+      <p class="sub r" style="--i:2">Ongoing integration advice from <span class="accent">Dreamnote</span>.</p>
+      <p class="small r" style="--i:3">We continue to build new tools as needs arise.</p>
+    </div>
+  </section>
+
+  <section class="scene" data-scene>
+    <div class="layer">
+      <div class="kicker r">The Goal</div>
+      <h1 class="r" style="--i:1">Functioning tools<br>in the hands of <span class="accent">artists</span>.</h1>
+      <p class="sub r" style="--i:2">That is our objective.</p>
+    </div>
+  </section>
+
+  <section class="scene" data-scene>
+    <div class="layer">
+      <h1 class="r" style="font-size:clamp(2.1rem,6vw,4.2rem)">The music stays human.</h1>
+      <p class="sub r" style="--i:1">The understanding becomes limitless.</p>
+      <div class="mark r" style="--i:3"><span class="name"><span class="moon"></span> <span>Dream<span class="accent">note</span></span></span><span class="tag">Dreamscore</span></div>
+    </div>
+  </section>
+
+</main>
+<div class="noise"></div><div class="vignette"></div>
+<div class="dots" id="dots" aria-hidden="true"></div>
+<script>
+  var deck=document.getElementById('deck');
+  var html=document.documentElement;
+  var scenes=Array.prototype.slice.call(document.querySelectorAll('[data-scene]'));
+  var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var dotsWrap=document.getElementById('dots');
+  scenes.forEach(function(s,i){ var b=document.createElement('button'); b.setAttribute('aria-label','Section '+(i+1));
+    b.addEventListener('click',function(){ s.scrollIntoView({behavior:'smooth'}); }); dotsWrap.appendChild(b); });
+  var dots=dotsWrap.children;
+
+  var io=new IntersectionObserver(function(es){
+    es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in');
+      var idx=scenes.indexOf(e.target);
+      for(var k=0;k<dots.length;k++) dots[k].classList.toggle('on', k===idx);
+      if(e.target.hasAttribute('data-count')) runCount(); } });
+  },{root:deck,threshold:.5});
+  scenes.forEach(function(s){ io.observe(s); });
+
+  var counted=false;
+  function runCount(){
+    if(counted) return; counted=true;
+    var el=document.getElementById('counter'); var target=100000000000; var dur=2200; var t0=null;
+    if(reduce){ el.textContent=target.toLocaleString(); return; }
+    function ease(x){ return 1-Math.pow(1-x,4); }
+    function step(ts){ if(!t0)t0=ts; var p=Math.min(1,(ts-t0)/dur);
+      el.textContent=Math.floor(ease(p)*target).toLocaleString();
+      if(p<1) requestAnimationFrame(step); else el.textContent=target.toLocaleString(); }
+    requestAnimationFrame(step);
+  }
+
+  /* scroll-velocity + parallax loop: content leans into a fast scroll and snaps
+     crisp when it stops; each scene's content drifts as it passes through center */
+  var lastTop=deck.scrollTop, vel=0;
+  function frame(){
+    var top=deck.scrollTop;
+    var raw=top-lastTop; lastTop=top;
+    vel=vel*0.85 + raw*0.15;
+    var v=Math.max(-1,Math.min(1, vel/55));
+    html.style.setProperty('--v', v.toFixed(3));
+    var vh=deck.clientHeight||1;
+    for(var i=0;i<scenes.length;i++){
+      var r=scenes[i].getBoundingClientRect();
+      var c=(r.top + r.height/2 - vh/2)/vh;
+      if(c>1.3)c=1.3; if(c<-1.3)c=-1.3;
+      scenes[i].style.setProperty('--p', c.toFixed(3));
+    }
+    requestAnimationFrame(frame);
+  }
+
+  scenes[0].classList.add('in');
+  if(dots[0]) dots[0].classList.add('on');
+  if(!reduce) requestAnimationFrame(frame);
+</script>
+</body>
+</html>
